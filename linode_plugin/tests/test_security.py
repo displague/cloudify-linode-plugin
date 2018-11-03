@@ -25,7 +25,7 @@ import responses
 from cloudify.mocks import MockCloudifyContext
 from cloudify.exceptions import NonRecoverableError
 
-from digitalocean_plugin.security import DigitalOceanSecurity
+from linode_plugin.security import LinodeSecurity
 
 
 class TestSecurity(testtools.TestCase):
@@ -34,7 +34,7 @@ class TestSecurity(testtools.TestCase):
     badkey_path = 'xyzpdq.pub'
     test_random = random
 
-    test_instance = DigitalOceanSecurity()
+    test_instance = LinodeSecurity()
 
     @staticmethod
     def mock_ctx(test_name):
@@ -49,7 +49,7 @@ class TestSecurity(testtools.TestCase):
 
     @staticmethod
     def make_url(end_of_url):
-        return "https://api.digitalocean.com/v2/%s" % end_of_url
+        return "https://api.linode.com/v4/%s" % end_of_url
 
     @staticmethod
     def load_response(fixture_filename):
@@ -66,21 +66,21 @@ class TestSecurity(testtools.TestCase):
             return fix.read()
 
     @responses.activate
-    def test_add_pubkey_to_digitalocean_account(self):
+    def test_add_pubkey_to_linode_account(self):
         """
         Tests that:
             + bad input results in a NonRecoverableError
             + good input is processed correctly
-            + DigitalOcean service reponses are returned
+            + Linode service reponses are returned
               to the caller as a tuple of (key_id, key_fingerprint)
         """
-        ctx = self.mock_ctx('test_add_pubkey_to_digitalocean_account')
+        ctx = self.mock_ctx('test_add_pubkey_to_linode_account')
 
         # raising when garbage input is provided
         oops = self.assertRaises(
             NonRecoverableError,
             self.test_instance.
-            add_pubkey_to_digitalocean_account,
+            add_pubkey_to_linode_account,
             self.badkey_path,
             None,
             ctx=ctx
@@ -96,11 +96,11 @@ class TestSecurity(testtools.TestCase):
 
         responses.add(
             responses.POST,
-            self.make_url('account/keys'),
+            self.make_url('profile/sshkeys'),
             self.load_response('account.keys.json')
         )
 
-        result = self.test_instance.add_pubkey_to_digitalocean_account(
+        result = self.test_instance.add_pubkey_to_linode_account(
             pubkey_path,
             None,
             ctx=ctx
@@ -115,16 +115,16 @@ class TestSecurity(testtools.TestCase):
         self.assertEqual(expected_fingerprint, result_fingerprint)
 
     @responses.activate
-    def test_add_pubkey_to_digitalocean_account_needs_2xx(self):
+    def test_add_pubkey_to_linode_account_needs_2xx(self):
         """
-        a NonRecoverableError should be raised if the DigitalOcean server
+        a NonRecoverableError should be raised if the Linode server
         returns a non-200 response code
         """
         error_code = 505
 
         responses.add(
             responses.POST,
-            self.make_url('account/keys'),
+            self.make_url('profile/sshkeys'),
             status=error_code
         )
 
@@ -134,7 +134,7 @@ class TestSecurity(testtools.TestCase):
         oops = self.assertRaises(
             NonRecoverableError,
             self.test_instance.
-            add_pubkey_to_digitalocean_account,
+            add_pubkey_to_linode_account,
             pubkey_path,
             "a name"
         )
@@ -175,7 +175,7 @@ class TestSecurity(testtools.TestCase):
 
         act = self.test_instance._build_url(hi_mom)
         self.assertEqual(True, act.endswith(hi_mom))
-        self.assertEqual(act, "https://api.digitalocean.com/v2/hi/mom")
+        self.assertEqual(act, "https://api.linode.com/v4/hi/mom")
 
         act = self.test_instance._build_url("/%s" % hi_mom)
         self.assertEqual(True, act.endswith(hi_mom))
@@ -187,7 +187,7 @@ class TestSecurity(testtools.TestCase):
 
         hi_mom = "/hi/mommy/"
         act = self.test_instance._build_url(hi_mom)
-        self.assertEqual("https://api.digitalocean.com/v2/hi/mommy/", act)
+        self.assertEqual("https://api.linode.com/v4/hi/mommy/", act)
 
     def test_common_headers(self):
         """
@@ -205,7 +205,7 @@ class TestSecurity(testtools.TestCase):
         self.assertEqual(True, auth.startswith('Bearer '))
         self.assertEqual(
             True,
-            auth.endswith(self.test_instance.digitalocean_security_token)
+            auth.endswith(self.test_instance.linode_security_token)
         )
 
     def random_test_id(self):
@@ -216,14 +216,14 @@ class TestSecurity(testtools.TestCase):
         """
             Tests that:
                 + test_id makes it into to the request url
-                + method returns true, when a 204 is returned
+                + method returns true, when a 200 is returned
         """
         test_id = self.random_test_id()
 
         responses.add(
             responses.DELETE,
-            self.make_url("account/keys/%s" % test_id),
-            status=204
+            self.make_url("profile/sshkeys/%s" % test_id),
+            status=200
         )
 
         act = self.test_instance\
@@ -232,10 +232,10 @@ class TestSecurity(testtools.TestCase):
         self.assertEqual(True, act)
 
     @responses.activate
-    def test_delete_pubkey_from_account_by_keyid_needs_204(self):
+    def test_delete_pubkey_from_account_by_keyid_needs_200(self):
         """
             Tests that:
-                + a non-204 response code from the server
+                + a non-200 response code from the server
                   results in a NonRecoverableError
         """
         test_id = self.random_test_id()
@@ -243,7 +243,7 @@ class TestSecurity(testtools.TestCase):
 
         responses.add(
             responses.DELETE,
-            self.make_url("account/keys/%s" % test_id),
+            self.make_url("profile/sshkeys/%s" % test_id),
             status=test_status
         )
 
@@ -255,7 +255,7 @@ class TestSecurity(testtools.TestCase):
         )
 
         self.assertIn("Error on server", oops.message)
-        self.assertIn("Expected status code = '204'", oops.message)
+        self.assertIn("Expected status code = '200'", oops.message)
         self.assertIn(str(test_status), oops.message)
 
     @staticmethod
@@ -267,14 +267,14 @@ class TestSecurity(testtools.TestCase):
         """
             Tests that:
                 + test_fingerprint makes it into to the request url
-                + method returns true, when a 204 is returned
+                + method returns true, when a 200 is returned
         """
         test_fingerprint = self.random_fingerprint()
 
         responses.add(
             responses.DELETE,
-            self.make_url("account/keys/%s" % test_fingerprint),
-            status=204
+            self.make_url("profile/sshkeys/%s" % test_fingerprint),
+            status=200
         )
 
         self.assertEqual(
@@ -286,10 +286,10 @@ class TestSecurity(testtools.TestCase):
         )
 
     @responses.activate
-    def test_delete_pubkey_from_account_by_fingerprint_needs_204(self):
+    def test_delete_pubkey_from_account_by_fingerprint_needs_200(self):
         """
             Tests that:
-                + a non-204 response code from the server
+                + a non-200 response code from the server
                   results in a NonRecoverableError
         """
         error_code = 200
@@ -297,7 +297,7 @@ class TestSecurity(testtools.TestCase):
 
         responses.add(
             responses.DELETE,
-            self.make_url("account/keys/%s" % test_fingerprint),
+            self.make_url("profile/sshkeys/%s" % test_fingerprint),
             status=error_code
         )
 
@@ -308,5 +308,5 @@ class TestSecurity(testtools.TestCase):
         )
 
         self.assertIn("Error on server", oops.message)
-        self.assertIn("Expected status code = '204'", oops.message)
+        self.assertIn("Expected status code = '200'", oops.message)
         self.assertIn(str(error_code), oops.message)

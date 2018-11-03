@@ -25,7 +25,7 @@ def _get_credentials(provider, credentials_file_path=None):
     The file should look somewhat like this:
 
     ```
-    digitalocean:
+    linode:
         token: mylongtoken
 
     aws:

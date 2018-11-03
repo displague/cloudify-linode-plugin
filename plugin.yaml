@@ -1,15 +1,15 @@
 ######################################################################################
-# DigitalOcean plugin
+# Linode plugin
 ######################################################################################
 
 plugins:
-  digitalocean:
+  linode:
     executor: central_deployment_agent
-    source: https://github.com/cloudify-cosmo/cloudify-digitalocean-plugin/archive/master.zip
+    source: https://github.com/cloudify-cosmo/cloudify-linode-plugin/archive/master.zip
 
 
 node_types:
-  cloudify.digitalocean.nodes.Droplet:
+  cloudify.linode.nodes.Linode:
     derived_from: cloudify.nodes.Compute
     properties:
       use_external_resource:
@@ -17,39 +17,35 @@ node_types:
           Indicates whether the resource exists of if Cloudify should create the resource.
         type: boolean
         default: false
-      droplet_id:
+      linode_id:
         description: >
-          Whether external or created by the manager, Droplets will be associated with an ID
-          assigned by DigitalOcean.
+          Whether external or created by the manager, Linodes will be associated with an ID
+          assigned by Linode.
         type: interger
         default: -1
-      droplet_name:
+      linode_label:
         description: >
-          A label for the droplet. Must be [a-zA-Z0-9\-]*.
+          A label for the linode. Must be [a-zA-Z0-9\-]*.
         type: string
-        default: 'Cloudify-Droplet'
-      slug_size:
+        default: 'Cloudify-Linode'
+      instance_type:
         description: >
-          Multiplier by which Droplets are sized. Corresponds exactly to the amount of RAM provisioned, but also
-          scales the amount of SSD, CPU, and data transfer provisioned, and cost.
-          Possible values at the moment are 512mb, 1gb, 2gb, 4gb, 8gb, 16gb, 32gb, 48gb, 64gb.
+          Instant Type by which Linodes are sized. Scales the amount of SSD, CPU, and data transfer provisioned, and effects the cost.
+          Possible values at the moment are:
+            [ g6-nanode-1, g6-standard-1, g6-standard-2, g6-standard-4, g6-standard-6, g6-standard-8, g6-standard-16, g6-standard-20, g6-standard-24, g6-standard-32, g6-highmem-1, g6-highmem-2, g6-highmem-4, g6-highmem-8, g6-highmem-16 ]
           An API call exists to retrieve all of these values.
         type: string
         default: 512mb
       # ip is inherited from cloudify.nodes.Compute
-      #   All Droplets are associated to a publicly avail IPv4 address.
+      #   All Linodes are associated to a publicly avail IPv4 address.
       # install_agent (boolean) is inherited from Compute
       # cloudify_agent {} is inherited from Compute
-      region_slug:
+      region:
         description: >
-          A magic number for the region Region in which Droplet will be provisioned. Note, the magic string for these regions is not documented
-          in the DigitalOcean API.
-          Note that not all images are supported in all regions. Some testing is required to guess the magic number: 'nyc3' works fine, but 'nyc1'
-          does not, for example for ubuntu 14.04 x64 at time of this writing. (There is an api call available, too.)
-          The following are listed in parts of the doc: [nyc1, ams1, sfo1, nyc2, ams2, sgp1, lon1, nyc3, ams3, nyc3].
-          The API supports region information and can be queried for this information.
+          A magic slug for the Region where a Linode can be provisioned. The following are listed in the API at the time of writing:
+            [us-central, us-west, us-southeast, us-east, eu-west, ap-south, eu-central, ap-northeast, ap-northeast-1a]
         type: string
-        default: nyc3
+        default: us-east
       private_network_enablement:
         type: boolean
         default: false
@@ -61,9 +57,10 @@ node_types:
         default: false
       image_slug:
         description: >
-          A magic number for the type of distribution image. Note that all regions do not support all images.
+          A magic slug for the disk image (distribution).  At the time of writing, the available options are:
+          [ linode/arch, linode/centos6.8, linode/centos7, linode/containerlinux, linode/debian8, linode/debian9, linode/fedora26, linode/fedora27, linode/fedora28, linode/fedora29, linode/gentoo, linode/opensuse15.0, linode/opensuse42.3, linode/slackware14.1, linode/slackware14.2, linode/ubuntu14.04lts, linode/ubuntu16.04lts, linode/ubuntu17.10, linode/ubuntu18.04, linode/ubuntu18.10 ]
         type: string
-        default: ubuntu-14-04-x64
+        default: linode/ubuntu18.04
       ssh_keys:
         description: >
           A list of ssh key locations, used for authentication.
@@ -76,6 +73,6 @@ node_types:
         default: ''
     interfaces:
       cloudify.interfaces.lifecycle:
-        create: digitalocean_plugin.create
-        start: digitalocean_plugin.start
-        stop: digitalocean_plugin.stop
+        create: linode_plugin.create
+        start: linode_plugin.start
+        stop: linode_plugin.stop

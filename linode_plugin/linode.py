@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import digitalocean
+from linode_api4 import LinodeClient
 
-from cloudify import ctx
+from cloudify import ctx, Version
 from cloudify.decorators import operation
 # from cloudify.exceptions import RecoverableError
 
@@ -34,7 +34,7 @@ CREDENTIALS_FILE_PATHS = [
 
 @operation
 def create(args, **_):
-    """Create a droplet
+    """Create a linode
 
     if existing resource provided:
         if the resource actually exists:
@@ -52,24 +52,24 @@ def create(args, **_):
     set the resource's context (the resource will have a uuid, instance_id, node_id, deployment_id and blueprint_id)  # NOQA
     set the resource's properties
     """
-    # TODO: look for an available droplet of the same type if it exists
+    # TODO: look for an available linode of the same type if it exists
     # and use that instead if a property is provided where the user asks
     # to `find_existing_resource`
 
     # TODO: should this be abstracted?
     credentials = _get_credentials(args)
 
-    droplet = _create_droplet(args, credentials)
-    if not _droplet_created(droplet):
+    linode = _create_linode(args, credentials)
+    if not _linode_created(linode):
         ctx.abort_operation('Failed to create resource')
-    _use_resource(droplet.id)
-    _set_droplet_context()
-    _set_droplet_properties(droplet)
+    _use_resource(linode.id)
+    _set_linode_context()
+    _set_linode_properties(linode)
 
 
 @operation
 def delete(args, **_):
-    """Destroy a droplet
+    """Destroy a linode
 
     if the resource wasn't created by us:
         if user asks to delete externally provisioned resources:
@@ -82,12 +82,12 @@ def delete(args, **_):
     credentials = _get_credentials(args)
 
     resource_id = ctx.instance.runtime_properties['resource_id']
-    _delete_droplet(resource_id, credentials)
+    _delete_linode(resource_id, credentials)
 
 
 @operation
 def stop(args, **_):
-    """Shutdown a droplet
+    """Shutdown a linode
 
     get the resource
     stop it
@@ -96,13 +96,13 @@ def stop(args, **_):
     credentials = _get_credentials(args)
 
     resource_id = ctx.instance.runtime_properties['resource_id']
-    _stop_droplet(resource_id, credentials)
+    _stop_linode(resource_id, credentials)
     # TODO: try power_off if shutdown is not successful
 
 
 @operation
 def start(args, **_):
-    """Power a droplet on
+    """Power a linode on
 
     get the resource
     stop it
@@ -111,51 +111,51 @@ def start(args, **_):
     credentials = _get_credentials(args)
 
     resource_id = ctx.instance.runtime_properties['resource_id']
-    _start_droplet(resource_id, credentials)
+    _start_linode(resource_id, credentials)
 
 
-def _create_droplet(args, token):
-    ctx.logger.info('Creating Droplet...')
-    ctx.logger.debug('Droplet arguments: {0}'.format(args))
+def _create_linode(args, token):
+    ctx.logger.info('Creating Linode...')
+    ctx.logger.debug('Linode arguments: {0}'.format(args))
 
-    droplet = digitalocean.Droplet(
+    linode = linode.Linode(
         token=token,
         name=args.get('name', _generate_name()),
         region=args['region'],
         image=args['image'],
-        size_slug=args['size_slug'],
+        instance_type=args['instance_type'],
         backups=args.get('backups', True))
-    droplet.create()
+    linode.create()
 
-    return droplet
+    return linode
 
 
-def _delete_droplet(resource_id, credentials):
-    ctx.logger.info('Destroying droplet...')
-    droplet = _get_droplet(resource_id, credentials)
-    if droplet:
-        droplet.destroy()
-        _assert_completed(droplet)
-    if _get_droplet(resource_id, credentials):
-        raise ctx.abort_operation('Droplet not destroyed')
+def _delete_linode(resource_id, credentials):
+    ctx.logger.info('Destroying linode...')
+    linode = _get_linode(resource_id, credentials)
+    if linode:
+        linode.destroy()
+        _assert_completed(linode)
+    if _get_linode(resource_id, credentials):
+        raise ctx.abort_operation('Linode not destroyed')
     else:
-        ctx.logger.info('Droplet destroyed successfully')
+        ctx.logger.info('Linode destroyed successfully')
 
 
-def _stop_droplet(resource_id, credentials):
-    ctx.logger.info('Shutting droplet down...')
-    droplet = _get_droplet(resource_id, credentials)
-    if droplet:
-        droplet.shutdown()
-        _assert_completed(droplet)
+def _stop_linode(resource_id, credentials):
+    ctx.logger.info('Shutting linode down...')
+    linode = _get_linode(resource_id, credentials)
+    if linode:
+        linode.shutdown()
+        _assert_completed(linode)
 
 
-def _start_droplet(resource_id, credentials):
-    ctx.logger.info('Powering droplet on...')
-    droplet = _get_droplet(resource_id, credentials)
-    if droplet:
-        droplet.power_on()
-        _assert_completed(droplet)
+def _start_linode(resource_id, credentials):
+    ctx.logger.info('Powering linode on...')
+    linode = _get_linode(resource_id, credentials)
+    if linode:
+        linode.power_on()
+        _assert_completed(linode)
 
 
 def _use_resource(resource_id):
@@ -163,20 +163,20 @@ def _use_resource(resource_id):
     ctx.instance.runtime_properties['resource_id'] = resource_id
 
 
-def _get_droplet(resource_id, token):
-    manager = digitalocean.Manager(token=token)
-    for droplet in manager.get_all_droplets():
-        if droplet.id == resource_id:
-            return droplet
+def _get_linode(resource_id, token):
+    manager = linode.Manager(token=token)
+    for linode in manager.get_all_linodes():
+        if linode.id == resource_id:
+            return linode
     return None
 
 
-def _droplet_created(droplet, args):
-    return _assert_completed(droplet)
+def _linode_created(linode, args):
+    return _assert_completed(linode)
 
 
-def _set_droplet_context():
-    ctx.logger.debug('Setting droplet context...')
+def _set_linode_context():
+    ctx.logger.debug('Setting linode context...')
     ctx.instance.runtime_properties['resource_context'] = dict(
         uuid=str(uuid.uuid4()),
         node_instance_id=ctx.node_instance.id,
@@ -186,47 +186,44 @@ def _set_droplet_context():
     )
 
 
-def _set_droplet_properties(droplet):
-    ctx.logger.debug('Setting droplet properties...')
+def _set_linode_properties(linode):
+    ctx.logger.debug('Setting linode properties...')
     # TODO: Make this idempotent (well.. it is.. but.. really)
     ctx.instance.runtime_properties['resource_properties'] = dict(
         # The id is assigned above. Even though it's a property of
         # the resource, we shouldn't have two sources or truth
-        name=droplet.name,
-        image=droplet.image,
-        size=droplet.size,
-        region=droplet.region['name'],
-        disk=droplet.disk,
-        memory=droplet.memory,
-        vcpus=droplet.vcpus,
-        ssh_keys=droplet.ssh_keys,
-        tags=droplet.tags,
-        token=droplet.token,
-        created_at=droplet.created_at,
-        backups=droplet.backups)
+        label=linode.label,
+        image=linode.image.id,
+        type=linode.type.id,
+        region=linode.region.id,
+        disk=linode.specs.disk,
+        memory=linode.specs.memory,
+        vcpus=linode.specs.vcpus,
+        tags=linode.tags,
+        created=linode.created,
+        backups=linode.backups.enabled)
 
 
-def _assert_completed(droplet):
-    droplet_status = _get_droplet_status(droplet)
-    if droplet_status == 'in-progress':
+def _assert_completed(linode):
+    linode_status = _get_linode_status(linode)
+    if linode_status == 'shutting_down':
         ctx.operation.retry(
             message='Waiting for operation to complete. Retrying...',
             retry_after=30)
-    elif droplet_status == 'completed':
-        ctx.logger.info('Droplet shutdown successfully')
-    elif droplet_status == 'errored':
-        ctx.abort_operation('Droplet shutdown failed')
+    elif linode_status == 'offline':
+        ctx.logger.info('Linode shutdown successfully')
+    else:
+        ctx.abort_operation('Linode shutdown failed')
 
 
-def _get_droplet_status(droplet):
-    for action in droplet.get_actions():
-        return action.status
+def _get_linode_status(linode):
+    return linode.status
 
 
 def _get_credentials(args):
     credentials = args.get('token')
     credentials = credentials or \
-        common._get_credentials('digitalocean').get('token')
+        common._get_credentials('linode').get('token')
     if not credentials:
         ctx.abort_operation(
             'Could not retrieve credentials. '
@@ -235,5 +232,13 @@ def _get_credentials(args):
             'under one of: {0}'.format(CREDENTIALS_FILE_PATHS))
 
 
+def _get_client():
+    """ XXX
+    This will get a LinodeClient prepared with an API Token and User-Agent
+    :return: the Linode Client
+    """
+    return LinodeClient(token=_get_credentials(), user_agent="Cloudify/{}".format(version))
+
+
 def _generate_name():
-    return 'test-droplet'
+    return 'test-linode'

@@ -16,17 +16,17 @@
 from setuptools import setup
 
 setup(
-    name='cloudify-digitalocean-plugin',
+    name='cloudify-linode-plugin',
     version='0.1',
-    author='GigaSpaces',
-    author_email='cosmo-admin@gigaspaces.com',
-    description='A cloudify plugin for managing Digital Ocean droplets',
-    packages=['digitalocean_plugin'],
+    author='Marques Johansson',
+    author_email='marques@linode.com',
+    description='A cloudify plugin for managing Linode Instances',
+    packages=['linode_plugin'],
     license='LICENSE',
     zip_safe=False,
     install_requires=[
-        "requests==2.7.0",
-        "python-digitalocean==1.9.0",
+        "requests==2.20.0",
+        "linode_api4==2.0.0",
         "cloudify-plugins-common>=4.0a2",
     ]
 )

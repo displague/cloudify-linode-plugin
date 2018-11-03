@@ -13,16 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-import digitalocean as ocean
-from cloudify import ctx
+from cloudify import ctx, Version
 from cloudify.decorators import operation
 from cloudify.exceptions import NonRecoverableError
+from linode_api4 import LinodeClient
+from linode_api4.errors import ApiError
 
 
 def load_token():
     """ XXX
     This will load a security token from a local file called token.txt
-    A token can be obtained from DigitalOcean by Registering a New Developer or Authorized Application.
+    A token can be obtained from Linode by creating a personal access token.
+    https://www.linode.com/docs/platform/api/getting-started-with-the-linode-api/#get-an-access-token
     :return: the security token, as a string
     :raises: NonRecoverableError if token is not present
     """
@@ -35,52 +37,56 @@ def load_token():
     with open(token_path, 'r') as f:
         return f.read()
 
+def get_client():
+    """ XXX
+    This will get a LinodeClient prepared with an API Token and User-Agent
+    :return: the Linode Client
+    """
+    return LinodeClient(token=load_token(), user_agent="Cloudify/{}".format(version))
 
 def available_images():
     """ XXX
-    image specifiers are used to provision Droplets. Note: Not all images are available in all regions
+    image specifiers are used to provision Linodes.
     :return: a list of available image specifiers
     """
-    # TODO: Load from API: See https://developers.digitalocean.com/#list-all-images
-    return ['ubuntu-14-04-x64']
+    client = get_client()
+    return [d.id for d in client.images() ]
 
 
 def available_regions():
     """ XXX
-    region specifiers are used to provision Droplets in a particular data center ('region').
-    Note: Not all images or options are available on all regions.
+    region specifiers are used to provision Linodes in a particular data center ('region').
+    Note: Not all options are available on all regions.
     :return: a list of available region specifiers
     """
-    # TODO Load from API: See https://developers.digitalocean.com/#list-all-regions
-    regions = ['nyc3', 'nyc1', 'nyc2']
-    return regions
+    client = get_client()
+    return [d.id for d in client.regions() ]
 
 
-def available_slug_sizes(region):
+def available_instance_types(region):
     """ XXX
     :param region: region specifier for which to return slug sizes
     :return: all available slug sizes
     """
-    # TODO Load from API: See https://developers.digitalocean.com/#list-all-regions
-    sizes = ['512mb']
-    return sizes
+    client = get_client()
+    return [d.id for d in client.linode.types() ]
 
 
-def generate_droplet_name():
+def generate_linode_label():
     """ XXX
-    :return: a name for droplets where they're not provided from the recipe
+    :return: a name for linodes where they're not provided from the recipe
     """
-    return "Cloudify-Droplet"
+    return "Cloudify-Linode"
 
 
 @operation
-def create(droplet_name=None, region=None, image=None, size_slug='512mb', backups=False):
+def create(linode_label=None, region=None, image=None, instance_type='g6-nanode-1', backups=False):
     """ XXX
-    Tell the API to create a droplet. Note that not all combinations of options are possible
-    :param droplet_name: formal name
+    Tell the API to create a linode. Note that not all combinations of options are possible
+    :param linode_label: formal name
     :param region: region to choose
     :param image: image to use
-    :param size_slug: size slug - this value determines RAM, CPU, bandwidth, and cost of the Droplet.
+    :param instance_type: size slug - this value determines RAM, CPU, bandwidth, and cost of the Linode.
     :param backups: whether to use a backup
     :return: None
     """
@@ -89,103 +95,106 @@ def create(droplet_name=None, region=None, image=None, size_slug='512mb', backup
             return load_func()[0]
         return param
 
-    ctx.logger.info("Creating a new DigitalOcean droplet.")
-    ctx.logger.debug("Create operation executing with params: droplet_name = '{0}', region = '{1}', image = '{2}', size_slug = '{3}', backups = '{4}'.".format(droplet_name, region, image, size_slug, backups))
+    ctx.logger.info("Creating a new Linode linode.")
+    ctx.logger.debug("Create operation executing with params: linode_label = '{0}', region = '{1}', image = '{2}', instance_type = '{3}', backups = '{4}'.".format(linode_label, region, image, instance_type, backups))
 
-    if droplet_name is not None:
-        _name = droplet_name
+    if linode_label is not None:
+        _label = linode_label
     else:
-        _name = generate_droplet_name()
+        _label = generate_linode_label()
 
     _image = first_unless_none(image, available_images())
     _region = first_unless_none(region, available_regions())
-    _size_slug = first_unless_none(size_slug, available_slug_sizes())  # works even if user passes None
+    _instance_type = first_unless_none(instance_type, available_instance_types())  # works even if user passes None
 
-    ctx.logger.debug("Computed values for name = '{0}', image = '{1}', region = '{2}', size_slug = '{3}.'".format(_name, _image, _region, _size_slug))
+    ctx.logger.debug("Computed values for name = '{0}', image = '{1}', region = '{2}', instance_type = '{3}.'".format(_label, _image, _region, _instance_type))
 
-    d = ocean.Droplet(token=load_token(), name=_name, image=_image, region=_region,
-                      size_slug=_size_slug, backups=backups)
+    client = get_client()
+    d = client.linode.instance_create(ltype=_instance_type,  region=_region, image=_image,
+                      label=_label, backups=backups)
     d.create()
     # TODO need to check back later to see that the start operation has failed or succeeded or is still processing
     pass
 
 
-def get_droplet(droplet_id):
+def get_linode(linode_id):
     """ XXX
-    searches all droplets for the one with the given droplet_id
-    :param droplet_id: the one we're looking for
-    :return: that droplet, or None
+    searches all linodes for the one with the given linode_id
+    :param linode_id: the one we're looking for
+    :return: linode, or None
     """
-    def has_id(droplet):
-        return droplet.id == droplet_id
+    def has_id(linode):
+        return linode.id == linode_id
 
-    if droplet_id is None:
-        raise NonRecoverableError("droplet_id is required.")
+    client = get_client()
+    if linode_id is None:
+        raise NonRecoverableError("linode_id is required.")
     else:
-        droplets = filter(has_id, ocean.Manager(token=load_token()).get_all_droplets())
-        sz = len(droplets)
-        if sz > 1:
-            msg = droplet_does_not_exist_for_operation("retrieve", droplet_id)
+        try:
+            linode = client.load(Instance, linode_id)
+        except ApiError as err:
+            if err.status in [403,404]:
+                return None
+            msg = linode_does_not_exist_for_operation("retrieve", linode_id)
             ctx.logger.debug(msg)
             raise NonRecoverableError(msg)
-        elif sz == 1:
-            return droplets[0]
         else:
-            return None
+           return linode
+ 
 
 
-def droplet_does_not_exist_for_operation(op, droplet_id):
-    """ Creates an error message when Droplets are unexpectedly not found for some operation
-    :param op: operation for which a Droplet does not exist
-    :param droplet_id: id that we expected to find
+def linode_does_not_exist_for_operation(op, linode_id):
+    """ Creates an error message when Linodes are unexpectedly not found for some operation
+    :param op: operation for which a Linode does not exist
+    :param linode_id: id that we expected to find
     :return: a snotty message
     """
-    return "Attempted to {0} a droplet with id '{1}', but no \
-    such Droplet exists in the system.".format(op, droplet_id)
+    return "Attempted to {0} a linode with id '{1}', but no \
+    such Linode exists in the system.".format(op, linode_id)
 
 
 @operation
-def start(droplet_id=None):
+def start(linode_id=None):
     """ XXX
-    Starts a new Droplet, if it exists, otherwise creates a new one and starts it. does not check back for success.
-    :param droplet_id:
+    Starts a new Linode, if it exists, otherwise creates a new one and starts it. does not check back for success.
+    :param linode_id:
     :return: None
     """
-    def start_droplet(droplet):
-        for action in droplet.get_actions():
-            action.load()
-            ctx.logger.debug("Executing action '{0}' for droplet '{1}'..." % [str(action), str(droplet)])
+    def start_linode(linode):
+        ctx.logger.debug("Executing action '{0}' for linode '{1}'..." % ["boot", str(linode)])
+        linode.boot()
 
-    if droplet_id is None:
-        ctx.logger.info("Creating, then starting a new droplet.")
-        start_droplet(create())
+    if linode_id is None:
+        ctx.logger.info("Creating, then starting a new linode.")
+        start_linode(create())
     else:
-        ctx.logger.info("Starting existing droplet. Droplet id = '{0}'.".format(droplet_id))
-        d = get_droplet(droplet_id)
-        if d is not None:
-            start_droplet(d)
-        else:
-            msg = droplet_does_not_exist_for_operation("start", droplet_id)
+        d = get_linode(linode_id)
+        if d is None:
+            msg = linode_does_not_exist_for_operation("start", linode_id)
             ctx.logger.debug(msg)
             raise NonRecoverableError(msg)
+        else:
+            ctx.logger.info("Starting existing linode. Linode id = '{0}'.".format(linode_id))
+            start_linode(linode)
+
     # TODO need to check back later to see that the start operation has failed or succeeded or is still processing
     pass
 
 
 @operation
-def stop(droplet_id):
+def stop(linode_id):
     """ XXX
-    Asks the API to destroy a droplet, if it exists. Does not check back for success.
-    :param droplet_id:
+    Asks the API to destroy a linode, if it exists. Does not check back for success.
+    :param linode_id:
     :return: None
     """
-    d = get_droplet(droplet_id)
+    d = get_linode(linode_id)
     if d is None:
-        msg = droplet_does_not_exist_for_operation("stop", droplet_id)
+        msg = linode_does_not_exist_for_operation("stop", linode_id)
         ctx.logger.debug(msg)
         raise NonRecoverableError(msg)
     else:
-        ctx.logger.info("Stopping droplet with droplet id = '{0}'.".format(droplet_id))
+        ctx.logger.info("Stopping linode with linode id = '{0}'.".format(linode_id))
         d.destroy()
     # TODO need to check back later to see that the start operation has failed or succeeded or is still processing
     pass
